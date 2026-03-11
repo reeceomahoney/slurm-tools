@@ -48,6 +48,8 @@ slurm gui stop      # stop it
 
 The GUI shows GPU availability across nodes, running/completed jobs, log streaming, and supports cancelling jobs.
 
+![SLURM Monitor GUI](gui_screenshot.png)
+
 ## Config reference
 
 | Field         | Default | Description                        |
