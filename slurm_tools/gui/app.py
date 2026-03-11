@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import Flask, Response, render_template, request
 
-from slurm_tools.slurm import PROJECT_ROOT, load_config
+from slurm_tools.slurm import load_config
 
 config = load_config()
 
@@ -182,34 +182,6 @@ def cancel(job_id):
     ssh(f"scancel {job_id}")
     return "", 204
 
-
-@app.route("/fetch-results", methods=["PUT"])
-def fetch_results():
-    subprocess.run(
-        [
-            "rsync",
-            "-avz",
-            f"{config.host}:{config.remote_path}/outputs/eval_dist/",
-            f"{PROJECT_ROOT}/outputs/eval_dist/",
-        ],
-        capture_output=True,
-        timeout=120,
-    )
-    return "", 204
-
-
-@app.route("/clean-logs", methods=["DELETE"])
-def clean_logs():
-    ssh(
-        f"cd {config.remote_path}/slurm"
-        " && running=$(squeue -u $USER -h -t R -o 'slurm-%i.out'); "
-        'if [ -n "$running" ]; then '
-        'ls slurm-*.out 2>/dev/null | grep -vF "$running" | xargs -r rm -f; '
-        "else "
-        "rm -f slurm-*.out; "
-        "fi"
-    )
-    return "", 204
 
 
 @app.route("/logs/<job_id>")

@@ -107,20 +107,23 @@ def read_pid() -> int | None:
 
 
 def gui_start() -> None:
-    if pid := read_pid():
-        print(f"GUI already running (PID {pid})")
+    if read_pid():
+        print("GUI already running at http://127.0.0.1:5000")
         return
 
     pid = os.fork()
     if pid > 0:
         PID_FILE.write_text(str(pid))
-        print(f"GUI started (PID {pid})")
+        print("GUI started at http://127.0.0.1:5000")
         return
 
     os.setsid()
+    devnull = os.open(os.devnull, os.O_RDWR)
+    os.dup2(devnull, sys.stdin.fileno())
     log = open(LOG_FILE, "w")  # noqa: SIM115
     os.dup2(log.fileno(), sys.stdout.fileno())
     os.dup2(log.fileno(), sys.stderr.fileno())
+    os.close(devnull)
 
     from slurm_tools.gui.app import app
 

@@ -23,18 +23,6 @@
         <div class="card left-top">
           <div class="card-header">
             <h2>Jobs</h2>
-            <div class="btn-group">
-              <button
-                class="btn"
-                id="fetch-results-btn"
-                onclick="fetchResults()"
-              >
-                Fetch Results
-              </button>
-              <button class="btn" id="clean-logs-btn" onclick="cleanLogs()">
-                Clean Logs
-              </button>
-            </div>
           </div>
           <div hx-get="/jobs" hx-trigger="load, every 10s" hx-swap="innerHTML">
             Loading...
@@ -84,21 +72,6 @@
         $("#log-content").hide();
         $("#log-placeholder").css("display", "flex");
         $("#log-stream").empty();
-      }
-      function fetchResults() {
-        var $btn = $("#fetch-results-btn");
-        $btn.prop("disabled", true).text("Fetching Results...");
-        $.ajax({ url: "/fetch-results", method: "PUT" }).always(function () {
-          $btn.prop("disabled", false).text("Fetch Results");
-        });
-      }
-      function cleanLogs() {
-        if (!confirm("Delete logs for completed jobs?")) return;
-        var $btn = $("#clean-logs-btn");
-        $btn.prop("disabled", true).text("Cleaning...");
-        $.ajax({ url: "/clean-logs", method: "DELETE" }).always(function () {
-          $btn.prop("disabled", false).text("Clean Logs");
-        });
       }
       function cancelJob(id, btn) {
         if (!confirm("Cancel job " + id + "?")) return;
