@@ -5,7 +5,7 @@ CLI for submitting SLURM jobs via SSH and a web GUI for monitoring them.
 ## Install
 
 ```bash
-uv pip install -e slurm_tools
+uv pip install git+https://github.com/reeceomahoney/slurm-tools.git
 ```
 
 ## Configuration
