@@ -34,7 +34,7 @@ def load_config() -> SlurmConfig:
     config_path = PROJECT_ROOT / "configs" / "slurm.yaml"
     if not config_path.exists():
         return SlurmConfig()
-    return draccus.decode(SlurmConfig, config_path=config_path)
+    return draccus.parse(SlurmConfig, config_path=config_path)
 
 
 def build_sbatch_script(cfg: SlurmConfig) -> str:
