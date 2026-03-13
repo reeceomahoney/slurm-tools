@@ -46,7 +46,7 @@ slurm gui           # start the monitoring server on localhost:5000
 slurm gui stop      # stop it
 ```
 
-The GUI shows GPU availability across nodes, running/completed jobs, log streaming, and supports cancelling jobs.
+The GUI shows GPU availability across nodes, running/completed jobs, log streaming, and supports cancelling jobs. The GUI requires the host is set in `configs/slurm.yaml`. Use your alias from your ssh config and make sure you have an ssh key setup.
 
 ![SLURM Monitor GUI](gui_screenshot.png)
 
