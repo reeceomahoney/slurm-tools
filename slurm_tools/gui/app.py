@@ -10,6 +10,8 @@ from slurm_tools.slurm import load_config
 
 config = load_config()
 
+GPU_MEM_RE = re.compile(r"gpu_mem:(\d+)GB", re.IGNORECASE)
+
 dir = Path(__file__).parent
 app = Flask(
     __name__,
@@ -79,7 +81,7 @@ def expand_nodelist(s: str) -> list[str]:
 
 @app.route("/nodes")
 def nodes():
-    raw_nodes = ssh("sinfo -N -h -o '%N|%t|%G'")
+    raw_nodes = ssh("sinfo -N -h -o '%N|%t|%G|%f'")
     raw_jobs = ssh("squeue -h --states=running,completing -o '%N|%b'")
 
     # Per-node allocated GPU count from running jobs
@@ -91,13 +93,13 @@ def nodes():
         for node in expand_nodelist(parts[0]):
             node_alloc[node] = node_alloc.get(node, 0) + gpu_count(parts[1])
 
-    # Aggregate by GPU type
+    # Aggregate by (gpu_type, vram_gb) — same type can have different VRAM sizes
     seen: set[str] = set()
-    totals: dict[str, int] = {}
-    free: dict[str, int] = {}
+    totals: dict[tuple, int] = {}
+    free_map: dict[tuple, int] = {}
     for line in raw_nodes.strip().splitlines():
         parts = line.split("|")
-        if len(parts) != 3 or parts[0] in seen:
+        if len(parts) != 4 or parts[0] in seen:
             continue
         seen.add(parts[0])
         parsed = gpu_type_and_count(parts[2])
@@ -105,18 +107,26 @@ def nodes():
             continue
         gpu_type, total = parsed
         state = parts[1]
+        m = GPU_MEM_RE.search(parts[3])
+        vram_gb = int(m.group(1)) if m else 0
+        key = (gpu_type, vram_gb)
 
         allocated = node_alloc.get(parts[0], 0)
         if not allocated and state in ("alloc", "resv"):
             allocated = total
         node_free = max(0, total - allocated) if state not in DOWN else 0
 
-        totals[gpu_type] = totals.get(gpu_type, 0) + total
-        free[gpu_type] = free.get(gpu_type, 0) + node_free
+        totals[key] = totals.get(key, 0) + total
+        free_map[key] = free_map.get(key, 0) + node_free
 
     gpus = []
-    for gpu_type in sorted(totals):
-        t, f = totals[gpu_type], free[gpu_type]
+    for key in sorted(totals):
+        gpu_type, vram_per_gpu = key
+        t, f = totals[key], free_map[key]
+        vram_total = t * vram_per_gpu
+        vram_used = (t - f) * vram_per_gpu
+        vram_free = f * vram_per_gpu
+        vram_pct = round(vram_used / vram_total * 100) if vram_total else 0
         gpus.append(
             {
                 "type": gpu_type,
@@ -124,6 +134,11 @@ def nodes():
                 "used": t - f,
                 "free": f,
                 "pct": round((t - f) / t * 100) if t else 0,
+                "vram_per_gpu": vram_per_gpu,
+                "vram_total": vram_total,
+                "vram_used": vram_used,
+                "vram_free": vram_free,
+                "vram_pct": vram_pct,
             }
         )
     return render_template("nodes.html", gpus=gpus)

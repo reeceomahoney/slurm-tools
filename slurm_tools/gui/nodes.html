@@ -6,7 +6,9 @@
   </tr>
   {% for gpu in gpus %}
   <tr>
-    <td style="font-weight:600">{{ gpu.type }}</td>
+    <td style="font-weight:600">
+      {{ gpu.type }}{% if gpu.vram_per_gpu %} <span style="font-weight:normal;color:#888">({{ gpu.vram_per_gpu }} GB)</span>{% endif %}
+    </td>
     <td>
       <div class="gpu-bar">
         <div class="gpu-bar-used" style="width:{{ gpu.pct }}%">
