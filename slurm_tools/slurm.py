@@ -27,6 +27,7 @@ class SlurmConfig:
     ngpu: int = 1
     cpus: int = 16
     mem: str = "8G"
+    priority: bool = False
     dry_run: bool = False
 
 
@@ -47,6 +48,8 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
         "gres": f"gpu:{cfg.gpu}:{cfg.ngpu}",
         "output": "slurm/slurm-%j.out",
     }
+    if cfg.priority:
+        sbatch_opts["qos"] = "priority"
     header = "\n".join(f"#SBATCH --{k}={v}" for k, v in sbatch_opts.items())
     if not cfg.command:
         print("Error: no command specified (set in yaml or pass --command)")
