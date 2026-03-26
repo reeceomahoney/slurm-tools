@@ -22,6 +22,7 @@ gpu: h100
 ngpu: 1
 cpus: 16
 mem: 8G
+priority: true
 ```
 
 If no config file exists, all options fall back to dataclass defaults and can be set entirely via CLI flags.
@@ -62,4 +63,5 @@ The GUI shows GPU availability across nodes, running/completed jobs, log streami
 | `ngpu`        | `1`     | Number of GPUs                     |
 | `cpus`        | `16`    | CPUs per node                      |
 | `mem`         | `8G`    | Memory per CPU                     |
+| `priority`    | `false` | Use priority credits (if available)|
 | `dry_run`     | `false` | Print sbatch script without submit |
