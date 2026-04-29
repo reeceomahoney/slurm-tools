@@ -27,6 +27,7 @@ class SlurmConfig:
     ngpu: int = 1
     cpus: int = 16
     mem: str = "8G"
+    partition: str = "short"
     priority: bool = False
     dry_run: bool = False
 
@@ -44,7 +45,7 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
         "ntasks-per-node": cfg.cpus,
         "mem-per-cpu": cfg.mem,
         "time": f"{cfg.time}:00:00",
-        "partition": "short",
+        "partition": cfg.partition,
         "gres": f"gpu:{cfg.gpu}:{cfg.ngpu}",
         "output": "slurm/slurm-%j.out",
     }
