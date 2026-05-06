@@ -46,6 +46,7 @@ def index():
 
 GRES_RE = re.compile(r"gpu:(?:[^:(]+:)?(\d+)", re.IGNORECASE)
 GRES_TYPE_RE = re.compile(r"gpu:([^:(]+):(\d+)", re.IGNORECASE)
+FEATURE_GPU_RE = re.compile(r"NVIDIA_(\w+)", re.IGNORECASE)
 DOWN = {"down", "down*", "drain", "drain*", "drng", "maint"}
 NODELIST_RE = re.compile(r"^(.+)\[(.+)]$")
 
@@ -55,9 +56,15 @@ def gpu_count(gres: str) -> int:
     return int(m.group(1)) if m else 0
 
 
-def gpu_type_and_count(gres: str) -> tuple[str, int] | None:
+def gpu_type_and_count(gres: str, features: str = "") -> tuple[str, int] | None:
     m = GRES_TYPE_RE.search(gres)
-    return (m.group(1).upper(), int(m.group(2))) if m else None
+    if m:
+        return (m.group(1).upper(), int(m.group(2)))
+    n = gpu_count(gres)
+    if not n:
+        return None
+    feat = FEATURE_GPU_RE.search(features)
+    return (feat.group(1).upper() if feat else "GPU", n)
 
 
 def expand_nodelist(s: str) -> list[str]:
@@ -79,7 +86,7 @@ def expand_nodelist(s: str) -> list[str]:
 
 @app.route("/nodes")
 def nodes():
-    raw_nodes = ssh("sinfo -N -h -o '%N|%t|%G'")
+    raw_nodes = ssh("sinfo -N -h -o '%N|%t|%G|%f'")
     raw_jobs = ssh("squeue -h --states=running,completing -o '%N|%b'")
 
     # Per-node allocated GPU count from running jobs
@@ -97,10 +104,10 @@ def nodes():
     free: dict[str, int] = {}
     for line in raw_nodes.strip().splitlines():
         parts = line.split("|")
-        if len(parts) != 3 or parts[0] in seen:
+        if len(parts) != 4 or parts[0] in seen:
             continue
         seen.add(parts[0])
-        parsed = gpu_type_and_count(parts[2])
+        parsed = gpu_type_and_count(parts[2], parts[3])
         if not parsed:
             continue
         gpu_type, total = parsed
