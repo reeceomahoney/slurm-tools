@@ -5,11 +5,9 @@ import signal
 import subprocess
 import sys
 from dataclasses import dataclass
-from io import StringIO
 from pathlib import Path
 
 import draccus
-from fabric import Connection
 
 PROJECT_ROOT = Path.cwd()
 
@@ -93,9 +91,16 @@ def run() -> None:
     sync(cfg)
 
     print("Submitting...")
-    conn = Connection(cfg.host)
-    conn.put(StringIO(script), f"{cfg.remote_path}/submit.sh")
-    conn.run(f"cd {cfg.remote_path} && mkdir -p slurm && sbatch submit.sh")
+    subprocess.run(
+        ["ssh", cfg.host, f"mkdir -p {cfg.remote_path}/slurm && cat > {cfg.remote_path}/submit.sh"],
+        input=script,
+        text=True,
+        check=True,
+    )
+    subprocess.run(
+        ["ssh", cfg.host, f"cd {cfg.remote_path} && sbatch submit.sh"],
+        check=True,
+    )
 
 
 def read_pid() -> int | None:
