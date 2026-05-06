@@ -15,17 +15,17 @@ Place a `configs/slurm.yaml` in your working directory:
 ```yaml
 host: my-cluster
 remote_path: /data/user/project
-envs:
-  - WANDB_API_KEY
-  - HF_TOKEN
-command: >-
-  singularity run --nv container.sif make train
 time: 6
 gpu: h100
 ngpu: 1
 cpus: 16
 mem: 8G
 priority: true
+envs:
+  - WANDB_API_KEY
+  - HF_TOKEN
+command: >-
+  singularity run --nv container.sif make train
 ```
 
 If no config file exists, all options fall back to dataclass defaults and can be set entirely via CLI flags.
