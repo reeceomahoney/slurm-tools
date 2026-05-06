@@ -1,10 +1,11 @@
 """CLI for SLURM job submission and GUI management."""
 
 import os
+import shlex
 import signal
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import draccus
@@ -28,6 +29,7 @@ class SlurmConfig:
     partition: str = "short"
     priority: bool = False
     dry_run: bool = False
+    forward_env: list[str] = field(default_factory=list)
 
 
 def load_config() -> SlurmConfig:
@@ -54,8 +56,13 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
     if not cfg.command:
         print("Error: no command specified (set in yaml or pass --command)")
         sys.exit(1)
-    command = os.path.expandvars(cfg.command)
-    return f"#!/bin/bash\n{header}\n\nset -euo pipefail\n{command}\n"
+    exports = ""
+    for var in cfg.forward_env:
+        if var not in os.environ:
+            print(f"Error: forward_env requested '{var}' but it is not set locally")
+            sys.exit(1)
+        exports += f"export {var}={shlex.quote(os.environ[var])}\n"
+    return f"#!/bin/bash\n{header}\n\nset -euo pipefail\n{exports}{cfg.command}\n"
 
 
 def sync(cfg: SlurmConfig) -> None:
