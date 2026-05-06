@@ -15,14 +15,17 @@ Place a `configs/slurm.yaml` in your working directory:
 ```yaml
 host: my-cluster
 remote_path: /data/user/project
-command: >-
-  singularity run --nv container.sif make train
 time: 6
 gpu: h100
 ngpu: 1
 cpus: 16
 mem: 8G
 priority: true
+envs:
+  - WANDB_API_KEY
+  - HF_TOKEN
+command: >-
+  singularity run --nv container.sif make train
 ```
 
 If no config file exists, all options fall back to dataclass defaults and can be set entirely via CLI flags.
@@ -65,3 +68,14 @@ The GUI shows GPU availability across nodes, running/completed jobs, log streami
 | `mem`         | `8G`    | Memory per CPU                     |
 | `priority`    | `false` | Use priority credits (if available)|
 | `dry_run`     | `false` | Print sbatch script without submit |
+| `envs`        | `[]`    | Names of local env vars to forward into the job (see below) |
+
+### Forwarding environment variables
+
+Use `envs` to forward secrets like `WANDB_API_KEY` or `HF_TOKEN` from your
+local shell into the job without committing them. At submit time, each
+listed name is read from your local environment and prepended to the sbatch
+script as a quoted `export VAR=...` line. The variable must be set locally
+or submission errors out. Names in `envs` are forwarded literally — they are
+not interpolated into `command`, so write them once in `envs` rather than as
+`${VAR}` references in the script body.
