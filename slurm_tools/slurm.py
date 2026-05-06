@@ -29,7 +29,7 @@ class SlurmConfig:
     partition: str = "short"
     priority: bool = False
     dry_run: bool = False
-    forward_env: list[str] = field(default_factory=list)
+    envs: list[str] = field(default_factory=list)
 
 
 def load_config() -> SlurmConfig:
@@ -57,9 +57,9 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
         print("Error: no command specified (set in yaml or pass --command)")
         sys.exit(1)
     exports = ""
-    for var in cfg.forward_env:
+    for var in cfg.envs:
         if var not in os.environ:
-            print(f"Error: forward_env requested '{var}' but it is not set locally")
+            print(f"Error: envs requested '{var}' but it is not set locally")
             sys.exit(1)
         exports += f"export {var}={shlex.quote(os.environ[var])}\n"
     return f"#!/bin/bash\n{header}\n\nset -euo pipefail\n{exports}{cfg.command}\n"
