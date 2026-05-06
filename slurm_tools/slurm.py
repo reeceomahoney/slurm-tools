@@ -54,7 +54,8 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
     if not cfg.command:
         print("Error: no command specified (set in yaml or pass --command)")
         sys.exit(1)
-    return f"#!/bin/bash\n{header}\n\nset -euo pipefail\n{cfg.command}\n"
+    command = os.path.expandvars(cfg.command)
+    return f"#!/bin/bash\n{header}\n\nset -euo pipefail\n{command}\n"
 
 
 def sync(cfg: SlurmConfig) -> None:
