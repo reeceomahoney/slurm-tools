@@ -40,13 +40,14 @@ def load_config() -> SlurmConfig:
 
 
 def build_sbatch_script(cfg: SlurmConfig) -> str:
+    gres = f"gpu:{cfg.gpu}:{cfg.ngpu}" if cfg.gpu else f"gpu:{cfg.ngpu}"
     sbatch_opts = {
         "nodes": 1,
         "ntasks-per-node": cfg.cpus,
         "mem-per-cpu": cfg.mem,
         "time": f"{cfg.time}:00:00",
         "partition": cfg.partition,
-        "gres": f"gpu:{cfg.gpu}:{cfg.ngpu}",
+        "gres": gres,
         "output": "slurm/slurm-%j.out",
     }
     if cfg.priority:

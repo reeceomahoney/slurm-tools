@@ -59,7 +59,7 @@ The GUI shows GPU availability across nodes, running/completed jobs, log streami
 | `remote_path` | **required** | Absolute path on the remote host   |
 | `command`     | **required** | Shell command to run in the job    |
 | `time`        | `6`     | Job time limit in hours            |
-| `gpu`         | `h100`  | GPU type (e.g. h100, l40s)        |
+| `gpu`         | `h100`  | GPU type for typed GRES (e.g. h100, l40s); leave empty for `gpu:N` |
 | `ngpu`        | `1`     | Number of GPUs                     |
 | `cpus`        | `16`    | CPUs per node                      |
 | `mem`         | `8G`    | Memory per CPU                     |
