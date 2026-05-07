@@ -61,13 +61,14 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
     for entry in cfg.envs:
         if isinstance(entry, dict):
             name, value = next(iter(entry.items()))
+            escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`")
+            exports += f'export {name}="{escaped}"\n'
         else:
             name = entry
             if name not in os.environ:
                 print(f"Error: envs requested '{name}' but it is not set locally")
                 sys.exit(1)
-            value = os.environ[name]
-        exports += f"export {name}={shlex.quote(value)}\n"
+            exports += f"export {name}={shlex.quote(os.environ[name])}\n"
     return f"#!/bin/bash\n{header}\n\nset -euo pipefail\n{exports}{cfg.command}\n"
 
 
