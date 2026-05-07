@@ -43,6 +43,12 @@ slurm run --dry_run true           # print the sbatch script without submitting
 
 This rsyncs the project to the remote host (respecting `.gitignore`), then submits via `sbatch`.
 
+### Sync only
+
+```bash
+slurm sync                         # rsync the project without submitting a job
+```
+
 ### Web GUI
 
 ```bash
