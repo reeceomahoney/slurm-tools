@@ -61,7 +61,7 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
     for entry in cfg.envs:
         if isinstance(entry, dict):
             name, value = next(iter(entry.items()))
-            escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`")
+            escaped = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`")
             exports += f'export {name}="{escaped}"\n'
         else:
             name = entry
