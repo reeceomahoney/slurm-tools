@@ -7,6 +7,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import draccus
 
@@ -29,7 +30,7 @@ class SlurmConfig:
     partition: str = "short"
     priority: bool = False
     dry_run: bool = False
-    envs: list[str] = field(default_factory=list)
+    envs: list[Any] = field(default_factory=list)
 
 
 def load_config() -> SlurmConfig:
@@ -57,11 +58,16 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
         print("Error: no command specified (set in yaml or pass --command)")
         sys.exit(1)
     exports = ""
-    for var in cfg.envs:
-        if var not in os.environ:
-            print(f"Error: envs requested '{var}' but it is not set locally")
-            sys.exit(1)
-        exports += f"export {var}={shlex.quote(os.environ[var])}\n"
+    for entry in cfg.envs:
+        if isinstance(entry, dict):
+            name, value = next(iter(entry.items()))
+        else:
+            name = entry
+            if name not in os.environ:
+                print(f"Error: envs requested '{name}' but it is not set locally")
+                sys.exit(1)
+            value = os.environ[name]
+        exports += f"export {name}={shlex.quote(value)}\n"
     return f"#!/bin/bash\n{header}\n\nset -euo pipefail\n{exports}{cfg.command}\n"
 
 
