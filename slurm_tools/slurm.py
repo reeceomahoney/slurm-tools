@@ -69,7 +69,7 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
                 print(f"Error: envs requested '{name}' but it is not set locally")
                 sys.exit(1)
             exports += f"export {name}={shlex.quote(os.environ[name])}\n"
-    return f"#!/bin/bash\n{header}\n\nset -euo pipefail\n{exports}{cfg.command}\n"
+    return f"#!/bin/bash\n{header}\n\n{exports}set -euo pipefail\n{cfg.command}\n"
 
 
 def sync(cfg: SlurmConfig) -> None:
