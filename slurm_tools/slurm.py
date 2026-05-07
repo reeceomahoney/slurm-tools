@@ -111,6 +111,20 @@ def run() -> None:
     )
 
 
+def sync_cmd() -> None:
+    config_path = PROJECT_ROOT / "configs" / "slurm.yaml"
+    if not config_path.exists():
+        config_path = None
+    cfg = draccus.parse(SlurmConfig, config_path=config_path)
+
+    if not cfg.host or not cfg.remote_path:
+        print("Error: host and remote_path must be set (in yaml or via CLI)")
+        sys.exit(1)
+
+    print("Syncing...")
+    sync(cfg)
+
+
 def read_pid() -> int | None:
     """Read PID from file and return it if the process is alive, else clean up."""
     if not PID_FILE.exists():
@@ -167,7 +181,7 @@ def gui() -> None:
 
 # --- CLI ---
 
-SUBCOMMANDS = {"run": run, "gui": gui}
+SUBCOMMANDS = {"run": run, "sync": sync_cmd, "gui": gui}
 
 
 def main() -> None:
