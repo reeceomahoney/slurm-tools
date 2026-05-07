@@ -77,7 +77,7 @@ def sync(cfg: SlurmConfig) -> None:
         [
             "rsync",
             "-avz",
-            "--filter=:- .gitignore",
+            "--filter=.- .gitignore",
             f"{PROJECT_ROOT}/",
             f"{cfg.host}:{cfg.remote_path}",
         ],
