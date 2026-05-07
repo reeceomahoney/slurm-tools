@@ -24,6 +24,7 @@ priority: true
 envs:
   - WANDB_API_KEY
   - HF_TOKEN
+  - MUJOCO_GL: egl
 command: >-
   singularity run --nv container.sif make train
 ```
@@ -74,14 +75,19 @@ The GUI shows GPU availability across nodes, running/completed jobs, log streami
 | `mem`         | `8G`    | Memory per CPU                     |
 | `priority`    | `false` | Use priority credits (if available)|
 | `dry_run`     | `false` | Print sbatch script without submit |
-| `envs`        | `[]`    | Names of local env vars to forward into the job (see below) |
+| `envs`        | `[]`    | Env vars to set in the job — bare names are forwarded from local, `KEY: value` entries are set literally (see below) |
 
-### Forwarding environment variables
+### Setting environment variables
 
-Use `envs` to forward secrets like `WANDB_API_KEY` or `HF_TOKEN` from your
-local shell into the job without committing them. At submit time, each
-listed name is read from your local environment and prepended to the sbatch
-script as a quoted `export VAR=...` line. The variable must be set locally
-or submission errors out. Names in `envs` are forwarded literally — they are
-not interpolated into `command`, so write them once in `envs` rather than as
-`${VAR}` references in the script body.
+`envs` accepts two entry shapes:
+
+- **Bare name** (`- WANDB_API_KEY`) — read from your local shell at submit time
+  and exported in the job. Errors out if the variable isn't set locally. Use
+  this for secrets you don't want to commit.
+- **Key/value** (`- MUJOCO_GL: egl`) — exported in the job with the literal
+  value. Use this for static config like `MUJOCO_GL`, `TOKENIZERS_PARALLELISM`,
+  etc.
+
+Both forms are prepended to the sbatch script as quoted `export VAR=...`
+lines. They aren't interpolated into `command`, so reference them by name
+inside the job, not as `${VAR}` in the YAML.
