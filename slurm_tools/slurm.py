@@ -11,10 +11,22 @@ from typing import Any
 
 import draccus
 
-PROJECT_ROOT = Path.cwd()
-
 PID_FILE = Path("/tmp/slurm-gui.pid")
 LOG_FILE = Path("/tmp/slurm-gui.log")
+
+
+def find_project_root() -> Path:
+    return Path.cwd()
+
+
+def resolve_config_path() -> Path | None:
+    root = find_project_root()
+    env_val = os.environ.get("SLURM_CONFIG")
+    if env_val:
+        p = Path(env_val)
+        return p if p.is_absolute() else root / p
+    default = root / "configs" / "slurm.yaml"
+    return default if default.exists() else None
 
 
 @dataclass
@@ -34,9 +46,12 @@ class SlurmConfig:
 
 
 def load_config() -> SlurmConfig:
-    config_path = PROJECT_ROOT / "configs" / "slurm.yaml"
-    if not config_path.exists():
+    config_path = resolve_config_path()
+    if config_path is None:
         return SlurmConfig()
+    if not config_path.exists():
+        print(f"Error: config file not found: {config_path}")
+        sys.exit(1)
     return draccus.parse(SlurmConfig, config_path=config_path)
 
 
@@ -61,7 +76,9 @@ def build_sbatch_script(cfg: SlurmConfig) -> str:
     for entry in cfg.envs:
         if isinstance(entry, dict):
             name, value = next(iter(entry.items()))
-            escaped = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`")
+            escaped = (
+                str(value).replace("\\", "\\\\").replace('"', '\\"').replace("`", "\\`")
+            )
             exports += f'export {name}="{escaped}"\n'
         else:
             name = entry
@@ -78,7 +95,7 @@ def sync(cfg: SlurmConfig) -> None:
             "rsync",
             "-avz",
             "--filter=.- .gitignore",
-            f"{PROJECT_ROOT}/",
+            f"{find_project_root()}/",
             f"{cfg.host}:{cfg.remote_path}",
         ],
         check=True,
@@ -89,10 +106,7 @@ def sync(cfg: SlurmConfig) -> None:
 
 
 def run() -> None:
-    config_path = PROJECT_ROOT / "configs" / "slurm.yaml"
-    if not config_path.exists():
-        config_path = None
-    cfg = draccus.parse(SlurmConfig, config_path=config_path)
+    cfg = draccus.parse(SlurmConfig, config_path=resolve_config_path())
     script = build_sbatch_script(cfg)
     if cfg.dry_run:
         print(script)
@@ -107,7 +121,11 @@ def run() -> None:
 
     print("Submitting...")
     subprocess.run(
-        ["ssh", cfg.host, f"mkdir -p {cfg.remote_path}/slurm && cat > {cfg.remote_path}/submit.sh"],
+        [
+            "ssh",
+            cfg.host,
+            f"mkdir -p {cfg.remote_path}/slurm && cat > {cfg.remote_path}/submit.sh",
+        ],
         input=script,
         text=True,
         check=True,
@@ -119,10 +137,7 @@ def run() -> None:
 
 
 def sync_cmd() -> None:
-    config_path = PROJECT_ROOT / "configs" / "slurm.yaml"
-    if not config_path.exists():
-        config_path = None
-    cfg = draccus.parse(SlurmConfig, config_path=config_path)
+    cfg = draccus.parse(SlurmConfig, config_path=resolve_config_path())
 
     if not cfg.host or not cfg.remote_path:
         print("Error: host and remote_path must be set (in yaml or via CLI)")
