@@ -61,6 +61,21 @@ The GUI shows GPU availability across nodes, running/completed jobs, log streami
 
 ![SLURM Monitor GUI](gui_screenshot.png)
 
+### SSH performance
+
+Every `slurm` command — and every GUI poll — opens an SSH connection to the cluster. Enabling connection multiplexing in `~/.ssh/config` makes subsequent calls reuse a single channel, which noticeably reduces CLI latency and GUI refresh times:
+
+```sshconfig
+Host *
+    ServerAliveInterval 60
+    ServerAliveCountMax 30
+    ControlMaster auto
+    ControlPath ~/.ssh/sockets/%r@%h-%p
+    ControlPersist 10m
+```
+
+Create the socket directory once: `mkdir -p ~/.ssh/sockets`.
+
 ## Config reference
 
 | Field         | Default | Description                        |
