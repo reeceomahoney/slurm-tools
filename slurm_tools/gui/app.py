@@ -206,17 +206,38 @@ def cancel(job_id):
 
 
 
-@app.route("/logs/<job_id>")
-def logs(job_id):
+@app.route("/logs/<job_id>/history")
+def logs_history(job_id):
+    """Stream the existing log file as chunked plain text (fast initial load)."""
     if not job_id.isdigit():
         return "Bad job id", 400
 
-    follow = request.args.get("follow", "1") == "1"
-    cmd = (
-        f"tail -n +1 -f {config.remote_path}/slurm/slurm-{job_id}.out"
-        if follow
-        else f"cat {config.remote_path}/slurm/slurm-{job_id}.out"
-    )
+    cmd = f"cat {config.remote_path}/slurm/slurm-{job_id}.out"
+
+    def stream():
+        proc = subprocess.Popen(
+            ["ssh", config.host, cmd],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        try:
+            assert proc.stdout is not None
+            while chunk := proc.stdout.read(65536):
+                yield chunk
+        finally:
+            proc.terminate()
+            proc.wait()
+
+    return Response(stream(), mimetype="text/plain; charset=utf-8")
+
+
+@app.route("/logs/<job_id>")
+def logs(job_id):
+    """SSE stream of newly-appended log lines only (use /history for backlog)."""
+    if not job_id.isdigit():
+        return "Bad job id", 400
+
+    cmd = f"tail -n 0 -f {config.remote_path}/slurm/slurm-{job_id}.out"
 
     def stream():
         proc = subprocess.Popen(

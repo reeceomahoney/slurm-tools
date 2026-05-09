@@ -50,28 +50,69 @@
     </div>
 
     <script>
-      var _src;
+      var _src, _ctrl, _buf = "", _raf = 0;
+      var _logEl;
+
+      function _flush() {
+        _raf = 0;
+        if (!_buf || !_logEl) return;
+        _logEl.appendChild(document.createTextNode(_buf));
+        _buf = "";
+        _logEl.scrollTop = _logEl.scrollHeight;
+      }
+      function _append(text) {
+        _buf += text;
+        if (!_raf) _raf = requestAnimationFrame(_flush);
+      }
+
+      async function _loadHistory(id, signal) {
+        var res = await fetch("/logs/" + id + "/history", { signal: signal });
+        if (!res.ok || !res.body) return;
+        var reader = res.body.getReader();
+        var dec = new TextDecoder();
+        while (true) {
+          var { done, value } = await reader.read();
+          if (done) break;
+          _append(dec.decode(value, { stream: true }));
+        }
+        _append(dec.decode());
+      }
+
       function openLog(id, follow) {
-        if (_src) _src.close();
+        closeLog();
         $("#log-placeholder").hide();
         $("#log-content").css("display", "flex");
         $("#log-title").text("Job " + id);
-        var $s = $("#log-stream").empty();
-        var url = "/logs/" + id + (follow ? "" : "?follow=0");
-        _src = new EventSource(url);
-        _src.onmessage = function (e) {
-          $s.append(document.createTextNode(e.data + "\n"));
-          $s.scrollTop($s[0].scrollHeight);
-        };
-        _src.onerror = function () {
-          _src.close();
-        };
+        _logEl = document.getElementById("log-stream");
+        _logEl.textContent = "";
+
+        var ctrl = new AbortController();
+        _ctrl = ctrl;
+        _loadHistory(id, ctrl.signal)
+          .catch(function (e) {
+            if (e.name !== "AbortError") console.error(e);
+          })
+          .then(function () {
+            if (!follow || _ctrl !== ctrl || ctrl.signal.aborted) return;
+            _src = new EventSource("/logs/" + id);
+            _src.onmessage = function (e) {
+              _append(e.data + "\n");
+            };
+            _src.onerror = function () {
+              _src.close();
+            };
+          });
       }
       function closeLog() {
-        if (_src) _src.close();
+        if (_src) { _src.close(); _src = null; }
+        if (_ctrl) { _ctrl.abort(); _ctrl = null; }
+        if (_raf) { cancelAnimationFrame(_raf); _raf = 0; }
+        _buf = "";
         $("#log-content").hide();
         $("#log-placeholder").css("display", "flex");
-        $("#log-stream").empty();
+        var el = document.getElementById("log-stream");
+        if (el) el.textContent = "";
+        _logEl = null;
       }
       function cancelJob(id, btn) {
         if (!confirm("Cancel job " + id + "?")) return;
