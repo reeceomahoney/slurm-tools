@@ -123,6 +123,7 @@ def run() -> None:
     subprocess.run(
         [
             "ssh",
+            "-q",
             cfg.host,
             f"mkdir -p {cfg.remote_path}/slurm && cat > {cfg.remote_path}/submit.sh",
         ],
@@ -131,7 +132,7 @@ def run() -> None:
         check=True,
     )
     subprocess.run(
-        ["ssh", cfg.host, f"cd {cfg.remote_path} && sbatch submit.sh"],
+        ["ssh", "-q", cfg.host, f"cd {cfg.remote_path} && sbatch submit.sh"],
         check=True,
     )
 

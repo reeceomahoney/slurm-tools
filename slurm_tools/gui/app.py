@@ -23,7 +23,7 @@ app = Flask(
 
 def ssh(cmd: str, *, timeout: int = 10) -> str:
     result = subprocess.run(
-        ["ssh", config.host, cmd],
+        ["ssh", "-q", config.host, cmd],
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -216,7 +216,7 @@ def logs_history(job_id):
 
     def stream():
         proc = subprocess.Popen(
-            ["ssh", config.host, cmd],
+            ["ssh", "-q", config.host, cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
@@ -241,7 +241,7 @@ def logs(job_id):
 
     def stream():
         proc = subprocess.Popen(
-            ["ssh", config.host, cmd],
+            ["ssh", "-q", config.host, cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
