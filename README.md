@@ -36,7 +36,9 @@ If no config file exists, all options fall back to dataclass defaults and can be
 To work with more than one cluster, keep the shared job settings at the top
 level and add a `clusters:` list. Each entry needs a `name`, `host`, and
 `remote_path`, and may override any other field — anything it omits is
-inherited from the top level:
+inherited from the top level. The one exception is `envs`: a cluster's `envs`
+are *appended* to the shared list rather than replacing it (a per-cluster
+entry with the same name overrides the shared value):
 
 ```yaml
 time: 6

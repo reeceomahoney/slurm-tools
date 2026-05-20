@@ -69,10 +69,16 @@ def load_clusters() -> list[SlurmConfig]:
 
     if not entries:
         return [SlurmConfig(**shared)]
-    return [
-        SlurmConfig(**{**shared, **{k: v for k, v in e.items() if k in valid}})
-        for e in entries
-    ]
+
+    clusters = []
+    for e in entries:
+        override = {k: v for k, v in e.items() if k in valid}
+        merged = {**shared, **override}
+        # envs are additive: shared entries first, then per-cluster ones, so a
+        # later export of the same name overrides the shared value.
+        merged["envs"] = (shared.get("envs") or []) + (override.get("envs") or [])
+        clusters.append(SlurmConfig(**merged))
+    return clusters
 
 
 def build_sbatch_script(cfg: SlurmConfig) -> str:
