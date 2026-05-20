@@ -5,11 +5,13 @@ import shlex
 import signal
 import subprocess
 import sys
-from dataclasses import dataclass, field
+import tempfile
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
 import draccus
+import yaml
 
 PID_FILE = Path("/tmp/slurm-gui.pid")
 LOG_FILE = Path("/tmp/slurm-gui.log")
@@ -31,6 +33,7 @@ def resolve_config_path() -> Path | None:
 
 @dataclass
 class SlurmConfig:
+    name: str = ""
     host: str = ""
     remote_path: str = ""
     command: str = ""
@@ -45,14 +48,31 @@ class SlurmConfig:
     envs: list[Any] = field(default_factory=list)
 
 
-def load_config() -> SlurmConfig:
+def load_clusters() -> list[SlurmConfig]:
+    """Load every cluster, resolving each against the shared top-level defaults.
+
+    The config file may either be a single flat cluster, or define shared job
+    settings at the top level plus a `clusters:` list where each entry overrides
+    only the fields that differ (at minimum `name`, `host`, `remote_path`).
+    """
     config_path = resolve_config_path()
     if config_path is None:
-        return SlurmConfig()
+        return [SlurmConfig()]
     if not config_path.exists():
         print(f"Error: config file not found: {config_path}")
         sys.exit(1)
-    return draccus.parse(SlurmConfig, config_path=config_path)
+
+    raw = yaml.safe_load(config_path.read_text()) or {}
+    valid = {f.name for f in fields(SlurmConfig)}
+    entries = raw.pop("clusters", None)
+    shared = {k: v for k, v in raw.items() if k in valid}
+
+    if not entries:
+        return [SlurmConfig(**shared)]
+    return [
+        SlurmConfig(**{**shared, **{k: v for k, v in e.items() if k in valid}})
+        for e in entries
+    ]
 
 
 def build_sbatch_script(cfg: SlurmConfig) -> str:
@@ -105,8 +125,39 @@ def sync(cfg: SlurmConfig) -> None:
 # --- Subcommands ---
 
 
+def select_cluster() -> SlurmConfig:
+    """Pick a cluster (via `--cluster NAME`, else the first) and apply CLI flags."""
+    name = None
+    if "--cluster" in sys.argv:
+        i = sys.argv.index("--cluster")
+        if i + 1 >= len(sys.argv):
+            print("Error: --cluster requires a name")
+            sys.exit(1)
+        name = sys.argv[i + 1]
+        del sys.argv[i : i + 2]
+
+    clusters = load_clusters()
+    if name is not None:
+        cfg = next((c for c in clusters if c.name == name), None)
+        if cfg is None:
+            avail = ", ".join(c.name or c.host or "?" for c in clusters)
+            print(f"Error: no cluster named '{name}'. Available: {avail}")
+            sys.exit(1)
+    else:
+        cfg = clusters[0]
+
+    # Re-parse the resolved cluster through draccus so CLI flags can override it.
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+        yaml.safe_dump(asdict(cfg), f)
+        tmp = Path(f.name)
+    try:
+        return draccus.parse(SlurmConfig, config_path=tmp)
+    finally:
+        tmp.unlink()
+
+
 def run() -> None:
-    cfg = draccus.parse(SlurmConfig, config_path=resolve_config_path())
+    cfg = select_cluster()
     script = build_sbatch_script(cfg)
     if cfg.dry_run:
         print(script)
@@ -116,7 +167,7 @@ def run() -> None:
         print("Error: host and remote_path must be set (in yaml or via CLI)")
         sys.exit(1)
 
-    print("Syncing...")
+    print(f"Syncing to {cfg.name or cfg.host}...")
     sync(cfg)
 
     print("Submitting...")
@@ -138,13 +189,13 @@ def run() -> None:
 
 
 def sync_cmd() -> None:
-    cfg = draccus.parse(SlurmConfig, config_path=resolve_config_path())
+    cfg = select_cluster()
 
     if not cfg.host or not cfg.remote_path:
         print("Error: host and remote_path must be set (in yaml or via CLI)")
         sys.exit(1)
 
-    print("Syncing...")
+    print(f"Syncing to {cfg.name or cfg.host}...")
     sync(cfg)
 
 

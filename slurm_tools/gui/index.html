@@ -18,19 +18,44 @@
   <body>
     <h1>SLURM Monitor</h1>
 
+    {% if clusters|length > 1 %}
+    <div class="tabs">
+      {% for c in clusters %}
+      <button
+        class="tab{% if loop.first %} active{% endif %}"
+        onclick="switchCluster('{{ c }}', this)"
+      >
+        {{ c }}
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     <div class="layout">
       <div class="left">
         <div class="card left-top">
           <div class="card-header">
             <h2>Jobs</h2>
           </div>
-          <div hx-get="/jobs" hx-trigger="load, every 10s" hx-swap="innerHTML">
+          <div
+            id="jobs-pane"
+            hx-get="/jobs"
+            hx-vals='js:{cluster: currentCluster}'
+            hx-trigger="load, every 10s"
+            hx-swap="innerHTML"
+          >
             Loading...
           </div>
         </div>
         <div class="card left-bottom">
           <h2>GPUs</h2>
-          <div hx-get="/nodes" hx-trigger="load, every 30s" hx-swap="innerHTML">
+          <div
+            id="nodes-pane"
+            hx-get="/nodes"
+            hx-vals='js:{cluster: currentCluster}'
+            hx-trigger="load, every 30s"
+            hx-swap="innerHTML"
+          >
             Loading...
           </div>
         </div>
@@ -52,6 +77,25 @@
     <script>
       var _src, _ctrl, _buf = "", _raf = 0;
       var _logEl;
+      var currentCluster = {{ clusters[0]|tojson }};
+
+      function switchCluster(name, btn) {
+        if (name === currentCluster) return;
+        currentCluster = name;
+        closeLog();
+        $(".tab").removeClass("active");
+        $(btn).addClass("active");
+        htmx.ajax("GET", "/jobs", {
+          target: "#jobs-pane",
+          swap: "innerHTML",
+          values: { cluster: name },
+        });
+        htmx.ajax("GET", "/nodes", {
+          target: "#nodes-pane",
+          swap: "innerHTML",
+          values: { cluster: name },
+        });
+      }
 
       function _flush() {
         _raf = 0;
@@ -66,7 +110,10 @@
       }
 
       async function _loadHistory(id, signal) {
-        var res = await fetch("/logs/" + id + "/history", { signal: signal });
+        var res = await fetch(
+          "/logs/" + id + "/history?cluster=" + encodeURIComponent(currentCluster),
+          { signal: signal },
+        );
         if (!res.ok || !res.body) return;
         var reader = res.body.getReader();
         var dec = new TextDecoder();
@@ -94,7 +141,9 @@
           })
           .then(function () {
             if (!follow || _ctrl !== ctrl || ctrl.signal.aborted) return;
-            _src = new EventSource("/logs/" + id);
+            _src = new EventSource(
+              "/logs/" + id + "?cluster=" + encodeURIComponent(currentCluster),
+            );
             _src.onmessage = function (e) {
               _append(e.data + "\n");
             };
@@ -118,10 +167,13 @@
         if (!confirm("Cancel job " + id + "?")) return;
         var $btn = $(btn);
         $btn.prop("disabled", true).text("cancelling…");
-        $.post("/cancel/" + id).always(function () {
+        $.post(
+          "/cancel/" + id + "?cluster=" + encodeURIComponent(currentCluster),
+        ).always(function () {
           htmx.ajax("GET", "/jobs", {
-            target: '[hx-get="/jobs"]',
+            target: "#jobs-pane",
             swap: "innerHTML",
+            values: { cluster: currentCluster },
           });
         });
       }

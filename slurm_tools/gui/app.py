@@ -6,9 +6,14 @@ from pathlib import Path
 
 from flask import Flask, Response, render_template, request
 
-from slurm_tools.slurm import load_config
+from slurm_tools.slurm import SlurmConfig, load_clusters
 
-config = load_config()
+CLUSTERS: list[tuple[str, SlurmConfig]] = [
+    (c.name or c.host or f"cluster-{i + 1}", c)
+    for i, c in enumerate(load_clusters())
+]
+CLUSTER_MAP = dict(CLUSTERS)
+CLUSTER_NAMES = [name for name, _ in CLUSTERS]
 
 GPU_MEM_RE = re.compile(r"gpu_mem:(\d+)GB", re.IGNORECASE)
 
@@ -21,14 +26,22 @@ app = Flask(
 )
 
 
-def ssh(cmd: str, *, timeout: int = 10) -> str:
+def ssh(cluster: SlurmConfig, cmd: str, *, timeout: int = 10) -> str:
     result = subprocess.run(
-        ["ssh", "-q", config.host, cmd],
+        ["ssh", "-q", cluster.host, cmd],
         capture_output=True,
         text=True,
         timeout=timeout,
     )
     return result.stdout
+
+
+def current_cluster() -> SlurmConfig:
+    """Resolve the cluster for this request from the `?cluster=` query param."""
+    name = request.args.get("cluster")
+    if name and name in CLUSTER_MAP:
+        return CLUSTER_MAP[name]
+    return CLUSTERS[0][1]
 
 
 def parse_table(raw: str) -> tuple[list[str], list[list[str]]]:
@@ -43,7 +56,7 @@ def parse_table(raw: str) -> tuple[list[str], list[list[str]]]:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", clusters=CLUSTER_NAMES)
 
 
 GRES_RE = re.compile(r"gpu:(?:[^:(]+:)?(\d+)", re.IGNORECASE)
@@ -88,8 +101,9 @@ def expand_nodelist(s: str) -> list[str]:
 
 @app.route("/nodes")
 def nodes():
-    raw_nodes = ssh("sinfo -N -h -o '%N|%t|%G|%f'")
-    raw_jobs = ssh("squeue -h --states=running,completing -o '%N|%b'")
+    cluster = current_cluster()
+    raw_nodes = ssh(cluster, "sinfo -N -h -o '%N|%t|%G|%f'")
+    raw_jobs = ssh(cluster, "squeue -h --states=running,completing -o '%N|%b'")
 
     # Per-node allocated GPU count from running jobs
     node_alloc: dict[str, int] = {}
@@ -153,7 +167,8 @@ def nodes():
 
 @app.route("/jobs")
 def jobs():
-    raw = ssh("squeue -u $USER -o '%.12i %.30j %.8T %.10M %.20b'")
+    cluster = current_cluster()
+    raw = ssh(cluster, "squeue -u $USER -o '%.12i %.30j %.8T %.10M %.20b'")
     headers, rows = parse_table(raw)
     # Rename ugly TRES_PER_NODE header
     headers = ["GPU" if "TRES" in h else h for h in headers]
@@ -168,6 +183,7 @@ def jobs():
                 )
     # Recent completed/failed/cancelled jobs from the last 7 days
     raw_closed = ssh(
+        cluster,
         "sacct -u $USER -S now-7days --noheader --parsable2 -X "
         "-o 'JobID,JobName,State,Elapsed,AllocTRES' "
         "| grep -vE 'RUNNING|PENDING'"
@@ -201,7 +217,7 @@ def jobs():
 def cancel(job_id):
     if not job_id.isdigit():
         return "Bad job id", 400
-    ssh(f"scancel {job_id}")
+    ssh(current_cluster(), f"scancel {job_id}")
     return "", 204
 
 
@@ -212,11 +228,12 @@ def logs_history(job_id):
     if not job_id.isdigit():
         return "Bad job id", 400
 
-    cmd = f"cat {config.remote_path}/slurm/slurm-{job_id}.out"
+    cluster = current_cluster()
+    cmd = f"cat {cluster.remote_path}/slurm/slurm-{job_id}.out"
 
     def stream():
         proc = subprocess.Popen(
-            ["ssh", "-q", config.host, cmd],
+            ["ssh", "-q", cluster.host, cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
@@ -237,11 +254,12 @@ def logs(job_id):
     if not job_id.isdigit():
         return "Bad job id", 400
 
-    cmd = f"tail -n 0 -f {config.remote_path}/slurm/slurm-{job_id}.out"
+    cluster = current_cluster()
+    cmd = f"tail -n 0 -f {cluster.remote_path}/slurm/slurm-{job_id}.out"
 
     def stream():
         proc = subprocess.Popen(
-            ["ssh", "-q", config.host, cmd],
+            ["ssh", "-q", cluster.host, cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

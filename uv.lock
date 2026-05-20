@@ -159,12 +159,14 @@ source = { editable = "." }
 dependencies = [
     { name = "draccus" },
     { name = "flask" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "draccus" },
     { name = "flask", specifier = ">=3.0" },
+    { name = "pyyaml" },
 ]
 
 [[package]]

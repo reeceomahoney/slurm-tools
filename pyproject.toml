@@ -3,7 +3,7 @@ name = "slurm-tools"
 version = "0.1.0"
 description = "SLURM job submission CLI and web monitoring GUI"
 requires-python = ">=3.10,<3.11"
-dependencies = ["draccus", "flask>=3.0"]
+dependencies = ["draccus", "flask>=3.0", "pyyaml"]
 
 [project.scripts]
 slurm = "slurm_tools.slurm:main"
