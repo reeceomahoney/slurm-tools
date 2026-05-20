@@ -31,12 +31,46 @@ command: >-
 
 If no config file exists, all options fall back to dataclass defaults and can be set entirely via CLI flags.
 
+### Multiple clusters
+
+To work with more than one cluster, keep the shared job settings at the top
+level and add a `clusters:` mapping keyed by cluster name. Each entry needs a
+`host` and `remote_path`, and may override any other field — anything it omits
+is inherited from the top level. The one exception is `envs`: a cluster's
+`envs` are *appended* to the shared list rather than replacing it (a
+per-cluster entry with the same name overrides the shared value):
+
+```yaml
+time: 6
+gpu: h100
+ngpu: 1
+cpus: 16
+mem: 8G
+envs:
+  - WANDB_API_KEY
+command: >-
+  singularity run --nv container.sif make train
+
+clusters:
+  prod:
+    host: cluster-a
+    remote_path: /scratch/me/project
+  dev:
+    host: cluster-b
+    remote_path: /home/me/project
+    gpu: l40s          # overrides the shared default
+```
+
+The GUI shows one tab per cluster. The CLI submits to the first cluster in the
+mapping by default; pass `--cluster NAME` to target another.
+
 ## Usage
 
 ### Submit a job
 
 ```bash
 slurm run                          # uses configs/slurm.yaml
+slurm run --cluster dev            # target a specific cluster (see Multiple clusters)
 slurm run --gpu l40s --time 3      # override specific fields
 slurm run --command "make eval"    # override command
 slurm run --dry_run true           # print the sbatch script without submitting
@@ -57,7 +91,7 @@ slurm gui           # start the monitoring server on localhost:5000
 slurm gui stop      # stop it
 ```
 
-The GUI shows GPU availability across nodes, running/completed jobs, log streaming, and supports cancelling jobs. The GUI requires the host is set in `configs/slurm.yaml`. Use your alias from your ssh config and make sure you have an ssh key setup.
+The GUI shows GPU availability across nodes, running/completed jobs, log streaming, and supports cancelling jobs. With multiple clusters configured, each gets its own tab. The GUI requires the host is set in `configs/slurm.yaml`. Use your alias from your ssh config and make sure you have an ssh key setup.
 
 ![SLURM Monitor GUI](gui_screenshot.png)
 
@@ -80,6 +114,7 @@ Create the socket directory once: `mkdir -p ~/.ssh/sockets`.
 
 | Field         | Default | Description                        |
 | ------------- | ------- | ---------------------------------- |
+| `name`        | `""`    | Cluster label (the `clusters:` mapping key) — shown as a GUI tab and used by `--cluster` |
 | `host`        | **required** | SSH host alias for the cluster     |
 | `remote_path` | **required** | Absolute path on the remote host   |
 | `command`     | **required** | Shell command to run in the job    |

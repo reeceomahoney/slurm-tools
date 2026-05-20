@@ -2,13 +2,19 @@
 
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from flask import Flask, Response, render_template, request
 
-from slurm_tools.slurm import load_config
+from slurm_tools.slurm import SlurmConfig, load_clusters
 
-config = load_config()
+CLUSTERS: list[tuple[str, SlurmConfig]] = [
+    (c.name or c.host or f"cluster-{i + 1}", c)
+    for i, c in enumerate(load_clusters())
+]
+CLUSTER_MAP = dict(CLUSTERS)
+CLUSTER_NAMES = [name for name, _ in CLUSTERS]
 
 GPU_MEM_RE = re.compile(r"gpu_mem:(\d+)GB", re.IGNORECASE)
 
@@ -21,14 +27,28 @@ app = Flask(
 )
 
 
-def ssh(cmd: str, *, timeout: int = 10) -> str:
+def ssh(cluster: SlurmConfig, cmd: str, *, timeout: int = 10) -> str:
     result = subprocess.run(
-        ["ssh", "-q", config.host, cmd],
+        ["ssh", "-q", cluster.host, cmd],
         capture_output=True,
         text=True,
         timeout=timeout,
     )
     return result.stdout
+
+
+def ssh_many(cluster: SlurmConfig, *cmds: str, timeout: int = 10) -> list[str]:
+    """Run several SSH commands against one cluster concurrently."""
+    with ThreadPoolExecutor(max_workers=len(cmds)) as pool:
+        return list(pool.map(lambda c: ssh(cluster, c, timeout=timeout), cmds))
+
+
+def current_cluster() -> SlurmConfig:
+    """Resolve the cluster for this request from the `?cluster=` query param."""
+    name = request.args.get("cluster")
+    if name and name in CLUSTER_MAP:
+        return CLUSTER_MAP[name]
+    return CLUSTERS[0][1]
 
 
 def parse_table(raw: str) -> tuple[list[str], list[list[str]]]:
@@ -43,7 +63,7 @@ def parse_table(raw: str) -> tuple[list[str], list[list[str]]]:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", clusters=CLUSTER_NAMES)
 
 
 GRES_RE = re.compile(r"gpu:(?:[^:(]+:)?(\d+)", re.IGNORECASE)
@@ -88,8 +108,12 @@ def expand_nodelist(s: str) -> list[str]:
 
 @app.route("/nodes")
 def nodes():
-    raw_nodes = ssh("sinfo -N -h -o '%N|%t|%G|%f'")
-    raw_jobs = ssh("squeue -h --states=running,completing -o '%N|%b'")
+    cluster = current_cluster()
+    raw_nodes, raw_jobs = ssh_many(
+        cluster,
+        "sinfo -N -h -o '%N|%t|%G|%f'",
+        "squeue -h --states=running,completing -o '%N|%b'",
+    )
 
     # Per-node allocated GPU count from running jobs
     node_alloc: dict[str, int] = {}
@@ -153,7 +177,14 @@ def nodes():
 
 @app.route("/jobs")
 def jobs():
-    raw = ssh("squeue -u $USER -o '%.12i %.30j %.8T %.10M %.20b'")
+    cluster = current_cluster()
+    raw, raw_closed = ssh_many(
+        cluster,
+        "squeue -u $USER -o '%.12i %.30j %.8T %.10M %.20b'",
+        "sacct -u $USER -S now-7days --noheader --parsable2 -X "
+        "-o 'JobID,JobName,State,Elapsed,AllocTRES' "
+        "| grep -vE 'RUNNING|PENDING'",
+    )
     headers, rows = parse_table(raw)
     # Rename ugly TRES_PER_NODE header
     headers = ["GPU" if "TRES" in h else h for h in headers]
@@ -167,11 +198,6 @@ def jobs():
                     f"{m.group(1).upper()}:{m.group(2)}" if m else row[gpu_idx]
                 )
     # Recent completed/failed/cancelled jobs from the last 7 days
-    raw_closed = ssh(
-        "sacct -u $USER -S now-7days --noheader --parsable2 -X "
-        "-o 'JobID,JobName,State,Elapsed,AllocTRES' "
-        "| grep -vE 'RUNNING|PENDING'"
-    )
     closed_lines = [ln for ln in raw_closed.strip().splitlines() if ln.strip()]
     closed_rows = [ln.split("|") for ln in reversed(closed_lines)]
     for row in closed_rows:
@@ -201,7 +227,7 @@ def jobs():
 def cancel(job_id):
     if not job_id.isdigit():
         return "Bad job id", 400
-    ssh(f"scancel {job_id}")
+    ssh(current_cluster(), f"scancel {job_id}")
     return "", 204
 
 
@@ -212,11 +238,12 @@ def logs_history(job_id):
     if not job_id.isdigit():
         return "Bad job id", 400
 
-    cmd = f"cat {config.remote_path}/slurm/slurm-{job_id}.out"
+    cluster = current_cluster()
+    cmd = f"cat {cluster.remote_path}/slurm/slurm-{job_id}.out"
 
     def stream():
         proc = subprocess.Popen(
-            ["ssh", "-q", config.host, cmd],
+            ["ssh", "-q", cluster.host, cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
@@ -237,11 +264,12 @@ def logs(job_id):
     if not job_id.isdigit():
         return "Bad job id", 400
 
-    cmd = f"tail -n 0 -f {config.remote_path}/slurm/slurm-{job_id}.out"
+    cluster = current_cluster()
+    cmd = f"tail -n 0 -f {cluster.remote_path}/slurm/slurm-{job_id}.out"
 
     def stream():
         proc = subprocess.Popen(
-            ["ssh", "-q", config.host, cmd],
+            ["ssh", "-q", cluster.host, cmd],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -257,4 +285,4 @@ def logs(job_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    app.run(debug=True, host="127.0.0.1", port=5000, threaded=True)
