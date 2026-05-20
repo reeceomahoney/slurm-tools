@@ -34,11 +34,11 @@ If no config file exists, all options fall back to dataclass defaults and can be
 ### Multiple clusters
 
 To work with more than one cluster, keep the shared job settings at the top
-level and add a `clusters:` list. Each entry needs a `name`, `host`, and
-`remote_path`, and may override any other field — anything it omits is
-inherited from the top level. The one exception is `envs`: a cluster's `envs`
-are *appended* to the shared list rather than replacing it (a per-cluster
-entry with the same name overrides the shared value):
+level and add a `clusters:` mapping keyed by cluster name. Each entry needs a
+`host` and `remote_path`, and may override any other field — anything it omits
+is inherited from the top level. The one exception is `envs`: a cluster's
+`envs` are *appended* to the shared list rather than replacing it (a
+per-cluster entry with the same name overrides the shared value):
 
 ```yaml
 time: 6
@@ -52,17 +52,17 @@ command: >-
   singularity run --nv container.sif make train
 
 clusters:
-  - name: prod
+  prod:
     host: cluster-a
     remote_path: /scratch/me/project
-  - name: dev
+  dev:
     host: cluster-b
     remote_path: /home/me/project
     gpu: l40s          # overrides the shared default
 ```
 
-The GUI shows one tab per cluster. The CLI submits to the first cluster by
-default; pass `--cluster NAME` to target another.
+The GUI shows one tab per cluster. The CLI submits to the first cluster in the
+mapping by default; pass `--cluster NAME` to target another.
 
 ## Usage
 
@@ -114,7 +114,7 @@ Create the socket directory once: `mkdir -p ~/.ssh/sockets`.
 
 | Field         | Default | Description                        |
 | ------------- | ------- | ---------------------------------- |
-| `name`        | `""`    | Cluster label shown as a GUI tab and used by `--cluster` |
+| `name`        | `""`    | Cluster label (the `clusters:` mapping key) — shown as a GUI tab and used by `--cluster` |
 | `host`        | **required** | SSH host alias for the cluster     |
 | `remote_path` | **required** | Absolute path on the remote host   |
 | `command`     | **required** | Shell command to run in the job    |

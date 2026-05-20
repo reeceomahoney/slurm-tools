@@ -52,8 +52,9 @@ def load_clusters() -> list[SlurmConfig]:
     """Load every cluster, resolving each against the shared top-level defaults.
 
     The config file may either be a single flat cluster, or define shared job
-    settings at the top level plus a `clusters:` list where each entry overrides
-    only the fields that differ (at minimum `name`, `host`, `remote_path`).
+    settings at the top level plus a `clusters:` mapping keyed by cluster name,
+    where each entry overrides only the fields that differ (at minimum `host`
+    and `remote_path`).
     """
     config_path = resolve_config_path()
     if config_path is None:
@@ -71,9 +72,9 @@ def load_clusters() -> list[SlurmConfig]:
         return [SlurmConfig(**shared)]
 
     clusters = []
-    for e in entries:
-        override = {k: v for k, v in e.items() if k in valid}
-        merged = {**shared, **override}
+    for name, e in entries.items():
+        override = {k: v for k, v in (e or {}).items() if k in valid}
+        merged = {**shared, **override, "name": name}
         # envs are additive: shared entries first, then per-cluster ones, so a
         # later export of the same name overrides the shared value.
         merged["envs"] = (shared.get("envs") or []) + (override.get("envs") or [])
