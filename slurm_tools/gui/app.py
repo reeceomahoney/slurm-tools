@@ -2,6 +2,7 @@
 
 import re
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from flask import Flask, Response, render_template, request
@@ -34,6 +35,12 @@ def ssh(cluster: SlurmConfig, cmd: str, *, timeout: int = 10) -> str:
         timeout=timeout,
     )
     return result.stdout
+
+
+def ssh_many(cluster: SlurmConfig, *cmds: str, timeout: int = 10) -> list[str]:
+    """Run several SSH commands against one cluster concurrently."""
+    with ThreadPoolExecutor(max_workers=len(cmds)) as pool:
+        return list(pool.map(lambda c: ssh(cluster, c, timeout=timeout), cmds))
 
 
 def current_cluster() -> SlurmConfig:
@@ -102,8 +109,11 @@ def expand_nodelist(s: str) -> list[str]:
 @app.route("/nodes")
 def nodes():
     cluster = current_cluster()
-    raw_nodes = ssh(cluster, "sinfo -N -h -o '%N|%t|%G|%f'")
-    raw_jobs = ssh(cluster, "squeue -h --states=running,completing -o '%N|%b'")
+    raw_nodes, raw_jobs = ssh_many(
+        cluster,
+        "sinfo -N -h -o '%N|%t|%G|%f'",
+        "squeue -h --states=running,completing -o '%N|%b'",
+    )
 
     # Per-node allocated GPU count from running jobs
     node_alloc: dict[str, int] = {}
@@ -168,7 +178,13 @@ def nodes():
 @app.route("/jobs")
 def jobs():
     cluster = current_cluster()
-    raw = ssh(cluster, "squeue -u $USER -o '%.12i %.30j %.8T %.10M %.20b'")
+    raw, raw_closed = ssh_many(
+        cluster,
+        "squeue -u $USER -o '%.12i %.30j %.8T %.10M %.20b'",
+        "sacct -u $USER -S now-7days --noheader --parsable2 -X "
+        "-o 'JobID,JobName,State,Elapsed,AllocTRES' "
+        "| grep -vE 'RUNNING|PENDING'",
+    )
     headers, rows = parse_table(raw)
     # Rename ugly TRES_PER_NODE header
     headers = ["GPU" if "TRES" in h else h for h in headers]
@@ -182,12 +198,6 @@ def jobs():
                     f"{m.group(1).upper()}:{m.group(2)}" if m else row[gpu_idx]
                 )
     # Recent completed/failed/cancelled jobs from the last 7 days
-    raw_closed = ssh(
-        cluster,
-        "sacct -u $USER -S now-7days --noheader --parsable2 -X "
-        "-o 'JobID,JobName,State,Elapsed,AllocTRES' "
-        "| grep -vE 'RUNNING|PENDING'"
-    )
     closed_lines = [ln for ln in raw_closed.strip().splitlines() if ln.strip()]
     closed_rows = [ln.split("|") for ln in reversed(closed_lines)]
     for row in closed_rows:
@@ -275,4 +285,4 @@ def logs(job_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    app.run(debug=True, host="127.0.0.1", port=5000, threaded=True)

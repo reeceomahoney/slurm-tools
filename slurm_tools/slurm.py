@@ -233,7 +233,7 @@ def gui_start() -> None:
 
     from slurm_tools.gui.app import app
 
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="127.0.0.1", port=5000, threaded=True)
 
 
 def gui_stop() -> None:
