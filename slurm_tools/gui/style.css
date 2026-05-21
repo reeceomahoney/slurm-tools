@@ -220,27 +220,34 @@ pre.log {
 }
 /* GPU utilization bar */
 .gpu-bar {
+  position: relative;
   display: flex;
   height: 20px;
   border-radius: 4px;
   overflow: hidden;
   background: var(--border);
-  font-size: 0.75rem;
-  line-height: 20px;
 }
 .gpu-bar-used {
   background: var(--yellow);
-  color: #000;
-  text-align: center;
-  font-weight: 600;
   min-width: 0;
 }
 .gpu-bar-free {
   background: var(--green);
-  color: #000;
-  text-align: center;
-  font-weight: 600;
   min-width: 0;
+}
+.gpu-bar-num {
+  position: absolute;
+  top: 0;
+  line-height: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #000;
+}
+.gpu-bar-num-used {
+  left: 6px;
+}
+.gpu-bar-num-free {
+  right: 6px;
 }
 
 .log-header,

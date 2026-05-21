@@ -11,12 +11,10 @@
     </td>
     <td>
       <div class="gpu-bar">
-        <div class="gpu-bar-used" style="width:{{ gpu.pct }}%">
-          {% if gpu.pct > 15 %}{{ gpu.used }}{% endif %}
-        </div>
-        <div class="gpu-bar-free" style="width:{{ 100 - gpu.pct }}%">
-          {% if 100 - gpu.pct > 15 %}{{ gpu.free }}{% endif %}
-        </div>
+        <div class="gpu-bar-used" style="width:{{ gpu.pct }}%"></div>
+        <div class="gpu-bar-free" style="width:{{ 100 - gpu.pct }}%"></div>
+        <span class="gpu-bar-num gpu-bar-num-used">{{ gpu.used }}</span>
+        <span class="gpu-bar-num gpu-bar-num-free">{{ gpu.free }}</span>
       </div>
     </td>
   </tr>
