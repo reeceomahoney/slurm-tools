@@ -66,11 +66,15 @@ def index():
     return render_template("index.html", clusters=CLUSTER_NAMES)
 
 
-GRES_RE = re.compile(r"gpu:(?:[^:(]+:)?(\d+)", re.IGNORECASE)
+GRES_RE = re.compile(r"gpu:(?:\(null\)|[^():\s]+)?:?(\d+)", re.IGNORECASE)
 GRES_TYPE_RE = re.compile(r"gpu:([^:(]+):(\d+)", re.IGNORECASE)
 FEATURE_GPU_RE = re.compile(r"NVIDIA_(\w+)", re.IGNORECASE)
-DOWN = {"down", "down*", "drain", "drain*", "drng", "maint"}
-NODELIST_RE = re.compile(r"^(.+)\[(.+)]$")
+UNAVAILABLE = ("down", "drain", "maint", "fail", "invalid", "reserved", "unknown")
+
+
+def is_unavailable(state: str) -> bool:
+    s = state.lower()
+    return any(tok in s for tok in UNAVAILABLE)
 
 
 def gpu_count(gres: str) -> int:
@@ -89,63 +93,36 @@ def gpu_type_and_count(gres: str, features: str = "") -> tuple[str, int] | None:
     return (feat.group(1).upper() if feat else "GPU", n)
 
 
-def expand_nodelist(s: str) -> list[str]:
-    m = NODELIST_RE.match(s)
-    if not m:
-        return [s]
-    prefix, ranges = m.group(1), m.group(2)
-    out: list[str] = []
-    for part in ranges.split(","):
-        if "-" in part:
-            lo, hi = part.split("-", 1)
-            out += [
-                f"{prefix}{str(i).zfill(len(lo))}" for i in range(int(lo), int(hi) + 1)
-            ]
-        else:
-            out.append(f"{prefix}{part}")
-    return out
-
-
 @app.route("/nodes")
 def nodes():
     cluster = current_cluster()
-    raw_nodes, raw_jobs = ssh_many(
+    raw_nodes = ssh(
         cluster,
-        "sinfo -N -h -o '%N|%t|%G|%f'",
-        "squeue -h --states=running,completing -o '%N|%b'",
+        "sinfo -N -h -O 'NodeHost:25,StateLong:20,Gres:40,GresUsed:60,Features:250'",
     )
-
-    # Per-node allocated GPU count from running jobs
-    node_alloc: dict[str, int] = {}
-    for line in raw_jobs.strip().splitlines():
-        parts = line.split("|")
-        if len(parts) != 2 or not parts[0].strip() or parts[1] in ("", "N/A"):
-            continue
-        for node in expand_nodelist(parts[0]):
-            node_alloc[node] = node_alloc.get(node, 0) + gpu_count(parts[1])
 
     # Aggregate by (gpu_type, vram_gb) — same type can have different VRAM sizes
     seen: set[str] = set()
     totals: dict[tuple, int] = {}
     free_map: dict[tuple, int] = {}
     for line in raw_nodes.strip().splitlines():
-        parts = line.split("|")
-        if len(parts) != 4 or parts[0] in seen:
+        parts = line.split(maxsplit=4)
+        if len(parts) < 4 or parts[0] in seen:
             continue
         seen.add(parts[0])
-        parsed = gpu_type_and_count(parts[2], parts[3])
+        _, state, gres, gres_used = parts[:4]
+        features = parts[4] if len(parts) > 4 else ""
+
+        parsed = gpu_type_and_count(gres, features)
         if not parsed:
             continue
         gpu_type, total = parsed
-        state = parts[1]
-        m = GPU_MEM_RE.search(parts[3])
+        m = GPU_MEM_RE.search(features)
         vram_gb = int(m.group(1)) if m else 0
         key = (gpu_type, vram_gb)
 
-        allocated = node_alloc.get(parts[0], 0)
-        if not allocated and state in ("alloc", "resv"):
-            allocated = total
-        node_free = max(0, total - allocated) if state not in DOWN else 0
+        allocated = gpu_count(gres_used)
+        node_free = 0 if is_unavailable(state) else max(0, total - allocated)
 
         totals[key] = totals.get(key, 0) + total
         free_map[key] = free_map.get(key, 0) + node_free
